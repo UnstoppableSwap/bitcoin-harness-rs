@@ -7,6 +7,7 @@ use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 pub use crate::bitcoind_rpc_api::*;
 pub use jsonrpc_client;
@@ -42,14 +43,7 @@ impl Client {
     pub async fn network(&self) -> Result<Network> {
         let blockchain_info = self.getblockchaininfo().await?;
 
-        let network = match blockchain_info.chain.as_str() {
-            "main" => Network::Bitcoin,
-            "test" => Network::Testnet,
-            "regtest" => Network::Regtest,
-            _ => return Err(Error::UnexpectedResponse),
-        };
-
-        Ok(network)
+        Ok(blockchain_info.chain)
     }
 
     pub async fn median_time(&self) -> Result<u64> {
@@ -81,9 +75,8 @@ impl Client {
             .with_wallet(wallet_name)?
             .sendtoaddress(address, amount.to_btc())
             .await?;
-        let txid = Txid::from_hex(&txid)?;
 
-        Ok(txid)
+        Ok(Txid::from_str(&txid)?)
     }
 
     pub async fn get_raw_transaction(&self, txid: Txid) -> Result<Transaction> {
@@ -184,11 +177,15 @@ pub enum Error {
     #[error("Serde JSON: ")]
     SerdeJson(#[from] serde_json::Error),
     #[error("Parse amount: ")]
-    ParseAmount(#[from] bitcoin::util::amount::ParseAmountError),
+    ParseAmount(#[from] bitcoin::amount::ParseAmountError),
     #[error("Hex decode: ")]
-    Hex(#[from] bitcoin::hashes::hex::Error),
+    Hex(#[from] bitcoin::hashes::hex::error::HexToBytesError),
     #[error("Bitcoin decode: ")]
     BitcoinDecode(#[from] bitcoin::consensus::encode::Error),
+    #[error("Txid Parsing: ")]
+    TxidParseError(#[from] bitcoin::hashes::hex::error::HexToArrayError),
+    #[error("Address Parsing: ")]
+    AddressParseError(#[from] bitcoin::address::ParseError),
     // TODO: add more info to error
     #[error("Unexpected response: ")]
     UnexpectedResponse,

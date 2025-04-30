@@ -1,6 +1,7 @@
+use std::str::FromStr;
+
 use crate::bitcoind_rpc::{Client, Result};
 use crate::bitcoind_rpc_api::{BitcoindRpcApi, PsbtBase64, WalletProcessPsbtResponse};
-use bitcoin::hashes::hex::FromHex;
 use bitcoin::{Address, Amount, Transaction, Txid};
 use bitcoincore_rpc_json::{
     FinalizePsbtResult, GetAddressInfoResult, GetTransactionResult, GetWalletInfoResult,
@@ -62,11 +63,15 @@ impl Wallet {
     }
 
     pub async fn new_address(&self) -> Result<Address> {
-        Ok(self
+        let address = self
             .client
             .with_wallet(&self.name)?
             .getnewaddress(None, Some("bech32".into()))
-            .await?)
+            .await?;
+
+        let address = address.require_network(self.client.network().await?)?;
+
+        Ok(address)
     }
 
     pub async fn balance(&self) -> Result<Amount> {
@@ -85,7 +90,7 @@ impl Wallet {
             .with_wallet(&self.name)?
             .sendtoaddress(address, amount.to_btc())
             .await?;
-        let txid = Txid::from_hex(&txid)?;
+        let txid = Txid::from_str(&txid)?;
 
         Ok(txid)
     }
@@ -96,7 +101,7 @@ impl Wallet {
             .with_wallet(&self.name)?
             .sendrawtransaction(transaction.into())
             .await?;
-        let txid = Txid::from_hex(&txid)?;
+        let txid = Txid::from_str(&txid)?;
         Ok(txid)
     }
 
@@ -166,7 +171,7 @@ mod test {
     use std::time::Duration;
 
     use crate::{Bitcoind, Wallet};
-    use bitcoin::util::psbt::PartiallySignedTransaction;
+    use bitcoin::psbt::Psbt as PartiallySignedTransaction;
     use bitcoin::{Amount, Transaction, TxOut};
     use tokio::time::sleep;
 
@@ -227,10 +232,10 @@ mod test {
 
         let partial_signed_bitcoin_transaction: PartiallySignedTransaction = {
             let as_hex = base64::decode(joined_psbts.0).unwrap();
-            bitcoin::consensus::deserialize(&as_hex).unwrap()
+            PartiallySignedTransaction::deserialize(&as_hex).unwrap()
         };
 
-        let transaction = partial_signed_bitcoin_transaction.extract_tx();
+        let transaction = partial_signed_bitcoin_transaction.extract_tx().unwrap();
         let mut outputs = vec![];
 
         transaction.output.iter().for_each(|output| {
@@ -241,7 +246,7 @@ mod test {
         });
         // add shared output with twice the btc to fit change addresses
         outputs.push(TxOut {
-            value: Amount::from_btc(2.0).unwrap().to_sat(),
+            value: Amount::from_btc(2.0).unwrap(),
             script_pubkey: joined_address.clone().script_pubkey(),
         });
 
@@ -264,7 +269,7 @@ mod test {
         let psbt = {
             let partial_signed_bitcoin_transaction =
                 PartiallySignedTransaction::from_unsigned_tx(transaction).unwrap();
-            let hex_vec = bitcoin::consensus::serialize(&partial_signed_bitcoin_transaction);
+            let hex_vec = partial_signed_bitcoin_transaction.serialize();
             base64::encode(hex_vec).into()
         };
 

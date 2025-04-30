@@ -127,6 +127,8 @@ impl<'c> Bitcoind<'c> {
             .getnewaddress(None, None)
             .await?;
 
+        let reward_address = reward_address.require_network(bitcoind_client.network().await?)?;
+
         bitcoind_client
             .generatetoaddress(101 + spendable_quantity, reward_address.clone())
             .await?;
@@ -148,6 +150,9 @@ impl<'c> Bitcoind<'c> {
             .with_wallet(&self.wallet_name)?
             .getnewaddress(None, None)
             .await?;
+
+        let reward_address = reward_address.require_network(bitcoind_client.network().await?)?;
+
         bitcoind_client.generatetoaddress(1, reward_address).await?;
 
         Ok(())
@@ -175,6 +180,10 @@ pub enum Error {
     JsonRpc(#[from] jsonrpc_client::Error<reqwest::Error>),
     #[error("Url Parsing: ")]
     UrlParseError(#[from] url::ParseError),
+    #[error("Address Parsing: ")]
+    AddressParseError(#[from] bitcoin::address::ParseError),
+    #[error("Txid Parsing: ")]
+    TxidParseError(#[from] bitcoin::hashes::hex::error::HexToArrayError),
     #[error("Docker port not exposed: ")]
     PortNotExposed(u16),
 }
