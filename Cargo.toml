@@ -19,7 +19,7 @@ reqwest = { version = "0.12", default-features = false, features = [ "json" ] }
 serde = "1.0"
 serde_json = "1.0"
 sha2 = "0.10.8"
-testcontainers = "0.25"
+testcontainers = "0.15"
 thiserror = "1.0"
 tokio = { version = "1.0", features = [ "time" ] }
 tracing = "0.1"
